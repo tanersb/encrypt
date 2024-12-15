@@ -1,6 +1,7 @@
 import os
 from cryptography.fernet import Fernet
 from datetime import datetime
+import shutil
 
 files = []
 dirs = []
@@ -21,27 +22,67 @@ def log_activity(action, filename):
 
 def main():
     for file in os.listdir():
-        if file == "cryptog.py" or file == 'key.txt' or file =='decrypt.py' or file =='encrypt.py' or file == "encryptv2.py" or file == "cryptog.exe" or file =='encrypt.exe' or file == 'key.key':
+        if file == "_encrypt.py" or file == "cryptog.py" or file == 'key.txt' or file =='decrypt.py' or file =='encrypt.py' or file == "encryptv2.py" or file == "cryptog.exe" or file =='encrypt.exe' or file == 'key.key' or "key_backup" in file:
             continue
         if os.path.isfile(file):
             files.append(file)
         elif os.path.isdir(file):
             dirs.append(file)
 
+def validate_key(key):
+    """Check if the provided key is a valid Fernet key."""
+    try:
+        # Try to load the key to see if it's valid
+        Fernet(key)
+        return True
+    except Exception:
+        return False
+
+def generate_backup_filename():
+    """Generate a backup filename with an increasing number if necessary."""
+    backup_filename = "key_backup.txt"
+    counter = 1
+    while os.path.exists(backup_filename):
+        backup_filename = f"key_backup{counter}.txt"
+        counter += 1
+    return backup_filename
 
 try:
     with open("key.txt", 'rb') as thekey:
-        secretkey = thekey.read()
+        secretkey = thekey.read().strip()
 
-except:
+    # Check if the key is valid
+    if not validate_key(secretkey):
+        print("Geçersiz anahtar bulundu.")
+        user_choice = input("Yeni bir anahtar oluşturulsun mu? [Evet - Y / Hayır - N]: ").strip().lower()
+        if user_choice == 'y':
+            # Yedeğini al
+            backup_filename = generate_backup_filename()  # Yedek dosyasının adını oluştur
+            shutil.copy("key.txt", backup_filename)  # Eski key.txt'yi yedekle
+            print(f"Eski anahtar yedeklendi: {backup_filename}")
+
+            # Yeni bir anahtar oluştur ve yeni dosyaya yaz
+            secretkey = Fernet.generate_key()
+            with open("key.txt", 'wb') as thekey:
+                thekey.write(secretkey)
+            print("Yeni anahtar başarıyla oluşturuldu ve key.txt'ye kaydedildi.")
+        else:
+            print("Yeni anahtar oluşturulmadı. Program durduruluyor.")
+            exit(0)
+
+except FileNotFoundError:
+    print("Anahtar dosyası bulunamadı. Yeni anahtar oluşturuluyor...")
     secretkey = Fernet.generate_key()
 
     with open("key.txt", 'wb') as thekey:
         thekey.write(secretkey)
+    print("Yeni anahtar başarıyla oluşturuldu.")
 
 def encrypt():
     main()
     for file in files:
+        if "key_backup" in file:
+            continue  # Yedek dosyalarını şifrelemeden geç
         with open(file, 'rb') as thefile:
             contents = thefile.read()
         contents_decrypted = Fernet(secretkey).encrypt(contents)
@@ -60,6 +101,8 @@ def encrypt():
 def decrypt():
     main()
     for file in files:
+        if "key_backup" in file:
+            continue  # Yedek dosyalarını deşifrelemeden geç
         with open(file, 'rb') as thefile:
             contents = thefile.read()
         try:
